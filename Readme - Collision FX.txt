@@ -5,13 +5,13 @@
  Released:  2014-11-29
  KSP:       v0.25
 
- Thread:    TBC
+ Thread:    http://forum.kerbalspaceprogram.com/threads/101496
  Licence:   GNU v2, http://www.gnu.org/licenses/gpl-2.0.html
  Source:    https://github.com/pizzaoverhead/CollisionFX
 -------------------------------------------------------------
 
 Collision FX adds sound, light and particle effects when colliding or scraping your craft. Check the forum thread for updates:
-TBC
+http://forum.kerbalspaceprogram.com/threads/101496
 
 This plugin makes use of ialdabaoth and Sarbian's Module Manager to avoid needing part.cfg edits. Check here for new versions:
 http://forum.kerbalspaceprogram.com/threads/55219

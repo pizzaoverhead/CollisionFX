@@ -34,3 +34,4 @@ UnityEngine.dll
 mscorlib.dll
 **/*.dll
 **/3rd party binaries
+/Releases

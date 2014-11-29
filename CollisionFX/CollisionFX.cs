@@ -131,14 +131,14 @@ namespace CollisionFX
             GameEvents.onGameUnpause.Remove(OnUnpause);
         }
 
-        void OnCollisionEnter(Collision c)
+        // Not called on parts where physicalSignificance = false. Check the parent part instead.
+        public void OnCollisionEnter(Collision c)
         {
-            if (paused || hasGear || (hasWheel && !wheel.isDamaged))
-                return;
+            if (paused) return;
 
             if (c.relativeVelocity.magnitude > 3)
             {
-                var cfx = GetClosestChild(part, c.contacts[0].point);
+                var cfx = GetClosestChild(part, c.contacts[0].point + (part.rigidbody.velocity * Time.deltaTime));
                 if (cfx != null)
                     cfx.Impact();
                 else
@@ -156,21 +156,22 @@ namespace CollisionFX
             BangSound.audio.Play();
         }
 
-        void OnCollisionStay(Collision c)
+        // Not called on parts where physicalSignificance = false. Check the parent part instead.
+        public void OnCollisionStay(Collision c)
         {
             if (!scrapeSparks) return;
 
-            var cfx = GetClosestChild(part, c.contacts[0].point);
+            // Contact points are from the previous frame. Add the velocity to get the correct position.
+            var cfx = GetClosestChild(part, c.contacts[0].point + (part.rigidbody.velocity * Time.deltaTime));
             if (cfx != null)
             {
-                StopScrapeAudio();
+                StopScrape();
                 foreach (var p in part.children)
                 {
                     var colFx = p.GetComponent<CollisionFX>();
                     if (colFx != null)
-                        colFx.StopScrapeAudio();
+                        colFx.StopScrape();
                 }
-
                 cfx.Scrape(c);
                 return;
             }
@@ -189,19 +190,26 @@ namespace CollisionFX
         private static CollisionFX GetClosestChild(Part parent, Vector3 p)
         {
             float parentDistance = Vector3.Distance(parent.transform.position, p);
+            float minDistance = parentDistance;
+            CollisionFX closestChild = null;
+
             foreach (Part child in parent.children)
             {
                 if (child != null)
                 {
-                    if (Vector3.Distance(child.transform.position, p) < parentDistance)
+                    float childDistance = Vector3.Distance(child.transform.position, p);
+                    if (childDistance < minDistance)
                     {
                         var cfx = child.GetComponent<CollisionFX>();
                         if (cfx != null)
-                            return cfx;
+                        {
+                            minDistance = childDistance;
+                            closestChild = cfx;
+                        }
                     }
                 }
             }
-            return null;
+            return closestChild;
         }
 
         /// <summary>
@@ -212,7 +220,7 @@ namespace CollisionFX
         {
             if (paused || part == null || hasGear)
             {
-                StopScrapeAudio();
+                StopScrape();
                 return;
             }
             if (part.GetComponent<WheelCollider>() != null)
@@ -224,14 +232,14 @@ namespace CollisionFX
                     if (!wheel.isDamaged)
                     {
                         // Has an intact wheel.
-                        StopScrapeAudio();
+                        StopScrape();
                         return;
                     }
                 }
                 else
                 {
                     // Has a wheel collider but not a wheel (hover parts, some landing gear).
-                    StopScrapeAudio();
+                    StopScrape();
                     return;
                 }
             }
@@ -239,18 +247,22 @@ namespace CollisionFX
             fx.transform.LookAt(c.transform);
             if (part.rigidbody == null) // Part destroyed?
             {
-                StopScrapeAudio();
+                StopScrape();
                 return;
             }
+
             float m = c.relativeVelocity.magnitude;
             ScrapeParticles(m, c.contacts[0].point + (part.rigidbody.velocity * Time.deltaTime));
             ScrapeSound(m);
         }
 
-        public void StopScrapeAudio()
+        public void StopScrape()
         {
             if (scrapeSparks)
+            {
                 ScrapeSounds.audio.Stop();
+                scrapeLight.enabled = false;
+            }
         }
 
         private void ScrapeParticles(float speed, Vector3 contactPoint)
@@ -292,10 +304,10 @@ namespace CollisionFX
 
         private void OnCollisionExit(Collision c)
         {
-            StopScrapeAudio();
-            var cfx = GetClosestChild(part, c.contacts[0].point);
+            StopScrape();
+            var cfx = GetClosestChild(part, c.contacts[0].point + (part.rigidbody.velocity * Time.deltaTime));
             if (cfx != null)
-                cfx.StopScrapeAudio();
+                cfx.StopScrape();
         }
     }
 }

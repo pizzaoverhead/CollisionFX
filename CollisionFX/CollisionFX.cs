@@ -12,22 +12,42 @@ namespace CollisionFX
         [KSPField]
         public string collisionSound = String.Empty;
         [KSPField]
+        public string wheelImpactSound = String.Empty;
+        [KSPField]
         public string scrapeSound = String.Empty;
+        [KSPField]
+        public float sparkLightIntensity = 0.05f;
+        [KSPField]
+        public float minScrapeSpeed = 1f;
 
         public float pitchRange = 0.3f;
-        public float minScrapeSpeed = 1f;
         public float scrapeFadeSpeed = 5f;
-        public float sparkLightIntensity = 0.05f;
 
         private GameObject fx;
-        private bool hasWheel = false;
-        private ModuleWheel wheel = null;
-        private bool hasGear = false;
+        private ModuleWheel moduleWheel = null;
+        private WheelCollider wheelCollider = null;
         private FXGroup ScrapeSounds = new FXGroup("ScrapeSounds");
         private FXGroup BangSound = new FXGroup("BangSound");
+        private FXGroup WheelImpactSound = null;
         private Light scrapeLight;
         private Color lightColor1 = new Color(254, 226, 160); // Tan / light orange
         private Color lightColor2 = new Color(239, 117, 5); // Red-orange.
+
+#if DEBUG
+        private GameObject[] spheres = new GameObject[3];
+#endif
+
+        public class CollisionInfo
+        {
+            public CollisionFX CollisionFX;
+            public bool IsWheel;
+
+            public CollisionInfo(CollisionFX collisionFX, bool isWheel)
+            {
+                CollisionFX = collisionFX;
+                IsWheel = isWheel;
+            }
+        }
 
         public override void OnStart(StartState state)
         {
@@ -43,14 +63,20 @@ namespace CollisionFX
             GameEvents.onGamePause.Add(OnPause);
             GameEvents.onGameUnpause.Add(OnUnpause);
 
-            if (part.Modules.Contains("ModuleWheel"))
+            if (part.Modules.Contains("ModuleWheel")) // Suppress the log message on failure.
+                moduleWheel = part.Modules["ModuleWheel"] as ModuleWheel;
+
+            wheelCollider = part.gameObject.GetComponent<WheelCollider>();
+
+#if DEBUG
+            for (int i = 0; i < spheres.Length; i++)
             {
-                hasWheel = true;
+                spheres[i] = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                Destroy(spheres[i].collider);
             }
-            if (part.Modules.Contains("ModuleLandingGear"))
-            {
-                hasGear = true;
-            }
+            spheres[0].renderer.material.color = Color.red;
+            spheres[1].renderer.material.color = Color.green;
+#endif
         }
 
         private void SetupParticles()
@@ -108,6 +134,19 @@ namespace CollisionFX
             BangSound.audio.Stop();
             BangSound.audio.loop = false;
             BangSound.audio.volume = GameSettings.SHIP_VOLUME;
+
+            if (wheelCollider != null && !String.IsNullOrEmpty(wheelImpactSound))
+            {
+                WheelImpactSound = new FXGroup("WheelImpactSound");
+                part.fxGroups.Add(WheelImpactSound);
+                WheelImpactSound.audio = gameObject.AddComponent<AudioSource>();
+                WheelImpactSound.audio.clip = GameDatabase.Instance.GetAudioClip(wheelImpactSound);
+                WheelImpactSound.audio.dopplerLevel = 0f;
+                WheelImpactSound.audio.rolloffMode = AudioRolloffMode.Logarithmic;
+                WheelImpactSound.audio.Stop();
+                WheelImpactSound.audio.loop = false;
+                WheelImpactSound.audio.volume = GameSettings.SHIP_VOLUME;
+            }
         }
 
         bool paused = false;
@@ -138,22 +177,35 @@ namespace CollisionFX
 
             if (c.relativeVelocity.magnitude > 3)
             {
-                var cfx = GetClosestChild(part, c.contacts[0].point + (part.rigidbody.velocity * Time.deltaTime));
-                if (cfx != null)
-                    cfx.Impact();
+                var cInfo = GetClosestChild(part, c.contacts[0].point + (part.rigidbody.velocity * Time.deltaTime));
+                if (cInfo.CollisionFX != null)
+                    cInfo.CollisionFX.Impact(cInfo.IsWheel);
                 else
-                    Impact();
+                    Impact(IsCollidingWheel(c.contacts[0].point));
             }
         }
 
         /// <summary>
         /// This part has come into contact with something. Play an appropriate sound.
         /// </summary>
-        public void Impact()
+        public void Impact(bool isWheel)
         {
-            // Shift the pitch randomly each time so that the impacts don't all sound the same.
-            BangSound.audio.pitch = UnityEngine.Random.Range(1 - pitchRange, 1 + pitchRange);
-            BangSound.audio.Play();
+            if (isWheel && WheelImpactSound != null)
+            {
+                WheelImpactSound.audio.pitch = UnityEngine.Random.Range(1 - pitchRange, 1 + pitchRange);
+                WheelImpactSound.audio.Play();
+                BangSound.audio.Stop();
+            }
+            else
+            {
+                // Shift the pitch randomly each time so that the impacts don't all sound the same.
+                BangSound.audio.pitch = UnityEngine.Random.Range(1 - pitchRange, 1 + pitchRange);
+                BangSound.audio.Play();
+                if (WheelImpactSound != null)
+                {
+                    WheelImpactSound.audio.Stop();
+                }
+            }
         }
 
         // Not called on parts where physicalSignificance = false. Check the parent part instead.
@@ -162,8 +214,8 @@ namespace CollisionFX
             if (!scrapeSparks) return;
 
             // Contact points are from the previous frame. Add the velocity to get the correct position.
-            var cfx = GetClosestChild(part, c.contacts[0].point + (part.rigidbody.velocity * Time.deltaTime));
-            if (cfx != null)
+            var cInfo = GetClosestChild(part, c.contacts[0].point + (part.rigidbody.velocity * Time.deltaTime));
+            if (cInfo.CollisionFX != null)
             {
                 StopScrape();
                 foreach (var p in part.children)
@@ -172,7 +224,7 @@ namespace CollisionFX
                     if (colFx != null)
                         colFx.StopScrape();
                 }
-                cfx.Scrape(c);
+                cInfo.CollisionFX.Scrape(c);
                 return;
             }
 
@@ -180,24 +232,49 @@ namespace CollisionFX
         }
 
         /// <summary>
+        /// Checks whether the collision is happening on this part's wheel.
+        /// </summary>
+        /// <returns></returns>
+        private bool IsCollidingWheel(Vector3 collisionPoint)
+        {
+            if (wheelCollider == null) return false;
+            float wheelDistance = Vector3.Distance(wheelCollider.ClosestPointOnBounds(collisionPoint), collisionPoint);
+            float partDistance = Vector3.Distance(part.collider.ClosestPointOnBounds(collisionPoint), collisionPoint);
+            return wheelDistance < partDistance;
+        }
+
+        /// <summary>
         /// Searches child parts for the nearest instance of this class to the given point.
         /// </summary>
         /// <remarks>Parts with physicalSignificance=false have their collisions detected by the parent part.
-        /// To identify which part is the source of a collision, check which part the collision is closest to. This is non-ideal.</remarks>
+        /// To identify which part is the source of a collision, check which part the collision is closest to.</remarks>
         /// <param name="parent">The parent part whose children should be tested.</param>
         /// <param name="p">The point to test the distance from.</param>
         /// <returns>The nearest child part's CollisionFX module, or null if the parent part is nearest.</returns>
-        private static CollisionFX GetClosestChild(Part parent, Vector3 p)
+        private static CollisionInfo GetClosestChild(Part parent, Vector3 p)
         {
-            float parentDistance = Vector3.Distance(parent.transform.position, p);
+            float parentDistance = Vector3.Distance(parent.collider.ClosestPointOnBounds(p), p);
             float minDistance = parentDistance;
             CollisionFX closestChild = null;
+            bool isWheel = false;
 
             foreach (Part child in parent.children)
             {
-                if (child != null)
+                if (child != null && child.collider != null &&
+                    (child.physicalSignificance == Part.PhysicalSignificance.NONE))
                 {
-                    float childDistance = Vector3.Distance(child.transform.position, p);
+                    float childDistance = Vector3.Distance(child.collider.ClosestPointOnBounds(p), p);
+                    var wheel = child.GetComponent<WheelCollider>();
+                    if (wheel != null)
+                    {
+                        float wheelDistance = Vector3.Distance(wheel.ClosestPointOnBounds(p), p);
+                        if (wheelDistance < childDistance)
+                        {
+                            isWheel = true;
+                            childDistance = wheelDistance;
+                        }
+                    }
+
                     if (childDistance < minDistance)
                     {
                         var cfx = child.GetComponent<CollisionFX>();
@@ -206,10 +283,12 @@ namespace CollisionFX
                             minDistance = childDistance;
                             closestChild = cfx;
                         }
+                        else isWheel = false;
                     }
+                    else isWheel = false;
                 }
             }
-            return closestChild;
+            return new CollisionInfo(closestChild, isWheel);
         }
 
         /// <summary>
@@ -218,18 +297,18 @@ namespace CollisionFX
         /// <param name="c"></param>
         public void Scrape(Collision c)
         {
-            if (paused || part == null || hasGear)
+            if (paused || part == null)
             {
                 StopScrape();
                 return;
             }
-            if (part.GetComponent<WheelCollider>() != null)
+            if (wheelCollider != null)
             {
                 // Has a wheel collider.
-                if (hasWheel)
+                if (moduleWheel != null)
                 {
                     // Has a wheel module.
-                    if (!wheel.isDamaged)
+                    if (!moduleWheel.isDamaged)
                     {
                         // Has an intact wheel.
                         StopScrape();
@@ -244,7 +323,8 @@ namespace CollisionFX
                 }
             }
 
-            fx.transform.LookAt(c.transform);
+            if (fx != null)
+                fx.transform.LookAt(c.transform);
             if (part.rigidbody == null) // Part destroyed?
             {
                 StopScrape();
@@ -254,6 +334,13 @@ namespace CollisionFX
             float m = c.relativeVelocity.magnitude;
             ScrapeParticles(m, c.contacts[0].point + (part.rigidbody.velocity * Time.deltaTime));
             ScrapeSound(m);
+
+#if DEBUG
+            spheres[0].renderer.enabled = false;
+            spheres[1].renderer.enabled = true;
+            spheres[1].transform.position = part.transform.position;
+            spheres[2].transform.position = c.contacts[0].point + (part.rigidbody.velocity * Time.deltaTime);
+#endif
         }
 
         public void StopScrape()
@@ -262,6 +349,11 @@ namespace CollisionFX
             {
                 ScrapeSounds.audio.Stop();
                 scrapeLight.enabled = false;
+#if DEBUG
+                spheres[0].transform.position = part.transform.position;
+                spheres[0].renderer.enabled = true;
+                spheres[1].renderer.enabled = false;
+#endif
             }
         }
 
@@ -305,9 +397,12 @@ namespace CollisionFX
         private void OnCollisionExit(Collision c)
         {
             StopScrape();
-            var cfx = GetClosestChild(part, c.contacts[0].point + (part.rigidbody.velocity * Time.deltaTime));
-            if (cfx != null)
-                cfx.StopScrape();
+            if (c.contacts.Length > 0)
+            {
+                var cInfo = GetClosestChild(part, c.contacts[0].point + (part.rigidbody.velocity * Time.deltaTime));
+                if (cInfo.CollisionFX != null)
+                    cInfo.CollisionFX.StopScrape();
+            }
         }
     }
 }

@@ -253,7 +253,7 @@ namespace CollisionFX
         /// <returns>The nearest child part's CollisionFX module, or null if the parent part is nearest.</returns>
         private static CollisionInfo GetClosestChild(Part parent, Vector3 p)
         {
-            float parentDistance = Vector3.Distance(parent.collider.ClosestPointOnBounds(p), p);
+            float parentDistance = Vector3.Distance(parent.transform.position, p);
             float minDistance = parentDistance;
             CollisionFX closestChild = null;
             bool isWheel = false;
@@ -263,7 +263,7 @@ namespace CollisionFX
                 if (child != null && child.collider != null &&
                     (child.physicalSignificance == Part.PhysicalSignificance.NONE))
                 {
-                    float childDistance = Vector3.Distance(child.collider.ClosestPointOnBounds(p), p);
+                    float childDistance = Vector3.Distance(child.transform.position, p);
                     var wheel = child.GetComponent<WheelCollider>();
                     if (wheel != null)
                     {
@@ -285,7 +285,8 @@ namespace CollisionFX
                         }
                         else isWheel = false;
                     }
-                    else isWheel = false;
+                    else
+                        isWheel = false;
                 }
             }
             return new CollisionInfo(closestChild, isWheel);

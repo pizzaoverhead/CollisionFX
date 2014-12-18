@@ -1,9 +1,9 @@
 -------------------------------------------------------------
  Collision FX
  Author:    pizzaoverhead
- Version:   1.0
- Released:  2014-11-29
- KSP:       v0.25
+ Version:   2.1
+ Released:  2014-12-18
+ KSP:       v0.90
 
  Thread:    http://forum.kerbalspaceprogram.com/threads/101496
  Licence:   GNU v2, http://www.gnu.org/licenses/gpl-2.0.html
@@ -20,6 +20,8 @@ http://forum.kerbalspaceprogram.com/threads/55219
 Installation
 ------------
 Extract the zip to the root KSP folder, merging with the GameData folder.
+Download and install the latest version of ModuleManager:
+http://forum.kerbalspaceprogram.com/threads/55219
 
 
 Uninstallation
@@ -43,5 +45,22 @@ Bang1.ogg -
 
 Version history
 ---------------
+2.1 (2014-12-18)
+- Rebuilt for KSP 0.90.
+- Modified collision detection.
+- Added Gaalidas' fix for Kerbal Foundries parts.
+
+2.0 (2014-12-08)
+- Fixed wheel, repulsor and track parts from Modular Multiwheels and Kerbal Foundries showing sparks.
+- Improved collision detection.
+- Fixed stuck lights and sounds.
+
+1.2 (2014-12-02)
+- Disabled effects for EVA kerbals and Kerbal Foundries wheels and tracks.
+
+1.1 (2014-11-29)
+- Fixed issues with wheels producing sparks in some cases.
+- Disabled effects for Firespitter wheels as they have their own effects.
+
 1.0 (2014-11-29)
 - Initial release.

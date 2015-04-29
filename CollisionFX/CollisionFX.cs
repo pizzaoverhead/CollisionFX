@@ -140,7 +140,7 @@ namespace CollisionFX
                 SparkSounds.audio.clip = GameDatabase.Instance.GetAudioClip(sparkSound);
                 if (SparkSounds.audio.clip == null)
                 {
-                    Debug.LogError("CollisionFX: Unable to load sparkSound " + sparkSound);
+                    Debug.LogError("CollisionFX: Unable to load sparkSound \"" + sparkSound + "\"");
                     scrapeSparks = false;
                     return;
                 }
@@ -162,7 +162,7 @@ namespace CollisionFX
             ScrapeSounds.audio.clip = GameDatabase.Instance.GetAudioClip(scrapeSound);
             if (ScrapeSounds.audio.clip == null)
             {
-                Debug.LogError("CollisionFX: Unable to load scrapeSound " + scrapeSound);
+                Debug.LogError("CollisionFX: Unable to load scrapeSound \"" + scrapeSound + "\"");
             }
             else
             {
@@ -401,9 +401,9 @@ namespace CollisionFX
             }
 
             float m = c.relativeVelocity.magnitude;
-            ScrapeParticles(m, c.contacts[0].point + (part.rigidbody.velocity * Time.deltaTime), c.collider);
+            ScrapeParticles(m, c.contacts[0].point + (part.rigidbody.velocity * Time.deltaTime), c.collider, c.gameObject);
             ScrapeSound(ScrapeSounds, m);
-            if (CanSpark(c.collider))
+            if (CanSpark(c.collider, c.gameObject))
                 ScrapeSound(SparkSounds, m);
             else
                 SparkSounds.audio.Stop();
@@ -420,7 +420,8 @@ namespace CollisionFX
         {
             if (scrapeSparks)
             {
-                SparkSounds.audio.Stop();
+                if (SparkSounds != null && SparkSounds.audio == null)
+                    SparkSounds.audio.Stop();
                 scrapeLight.enabled = false;
 #if DEBUG
                 spheres[0].transform.position = part.transform.position;
@@ -428,7 +429,9 @@ namespace CollisionFX
                 spheres[1].renderer.enabled = false;
 #endif
             }
-            ScrapeSounds.audio.Stop();
+
+            if (ScrapeSounds != null && ScrapeSounds.audio != null)
+                ScrapeSounds.audio.Stop();
         }
 
         /* Kerbin natural biomes:
@@ -504,16 +507,32 @@ namespace CollisionFX
             return c.name.Length == 12 && Int64.TryParse(c.name.Substring(2, 10), out n);
         }
 
-        public bool CanSpark(Collider c)
+        public bool IsRagdoll(GameObject g)
         {
-            return scrapeSparks && FlightGlobals.ActiveVessel.atmDensity > 0 && FlightGlobals.currentMainBody.atmosphereContainsOxygen && !IsPQS(c);
+            // TODO: Find a better way of doing this.
+            return g.name.StartsWith("bn_") || g.name.StartsWith("be_");
         }
 
-        private void ScrapeParticles(float speed, Vector3 contactPoint, Collider col)
+        /// <summary>
+        /// Whether the object collided with produces sparks.
+        /// </summary>
+        /// <returns>True if the object is a CollisionFX with scrapeSparks or a non-CollisionFX object.</returns>
+        public bool TargetScrapeSparks(GameObject collidedWith)
+        {
+            CollisionFX objectCollidedWith = collidedWith.GetComponent<CollisionFX>();
+            return objectCollidedWith == null ? true : objectCollidedWith.scrapeSparks;
+        }
+
+        public bool CanSpark(Collider c, GameObject collidedWith)
+        {
+            return scrapeSparks && TargetScrapeSparks(collidedWith) && FlightGlobals.ActiveVessel.atmDensity > 0 && FlightGlobals.currentMainBody.atmosphereContainsOxygen && !IsPQS(c);
+        }
+
+        private void ScrapeParticles(float speed, Vector3 contactPoint, Collider col, GameObject collidedWith)
         {
             if (speed > minScrapeSpeed)
             {
-                if (!IsPQS(col) && !wheelCollider)
+                if (!IsPQS(col) && !wheelCollider && TargetScrapeSparks(collidedWith) && !IsRagdoll(collidedWith))
                 {
                     if (FlightGlobals.ActiveVessel.atmDensity > 0 && FlightGlobals.currentMainBody.atmosphereContainsOxygen)
                     {
@@ -583,3 +602,4 @@ namespace CollisionFX
         }
     }
 }
+

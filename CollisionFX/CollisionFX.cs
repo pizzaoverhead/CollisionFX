@@ -95,7 +95,6 @@ namespace CollisionFX
 
         private void SetupParticles()
         {
-            //ScreenMessages.PostScreenMessage(particleTypes[currentParticle]);
 
             sparkFx = (GameObject)GameObject.Instantiate(UnityEngine.Resources.Load("Effects/fx_exhaustSparks_flameout"));
             sparkFx.transform.parent = part.transform;
@@ -132,10 +131,11 @@ namespace CollisionFX
             {
                 if (SparkSounds == null)
                 {
-                    Debug.LogError("CollisionFX: Component was null");
+                    Debug.LogError("CollisionFX: SparkSounds was null");
                     return;
                 }
                 part.fxGroups.Add(SparkSounds);
+                SparkSounds.name = "SparkSounds";
                 SparkSounds.audio = gameObject.AddComponent<AudioSource>();
                 SparkSounds.audio.clip = GameDatabase.Instance.GetAudioClip(sparkSound);
                 if (SparkSounds.audio.clip == null)
@@ -158,6 +158,7 @@ namespace CollisionFX
                 return;
             }
             part.fxGroups.Add(ScrapeSounds);
+            ScrapeSounds.name = "ScrapeSounds";
             ScrapeSounds.audio = gameObject.AddComponent<AudioSource>();
             ScrapeSounds.audio.clip = GameDatabase.Instance.GetAudioClip(scrapeSound);
             if (ScrapeSounds.audio.clip == null)
@@ -175,6 +176,7 @@ namespace CollisionFX
             }
 
             part.fxGroups.Add(BangSound);
+            BangSound.name = "BangSound";
             BangSound.audio = gameObject.AddComponent<AudioSource>();
             BangSound.audio.clip = GameDatabase.Instance.GetAudioClip(collisionSound);
             BangSound.audio.dopplerLevel = 0f;
@@ -187,6 +189,7 @@ namespace CollisionFX
             {
                 WheelImpactSound = new FXGroup("WheelImpactSound");
                 part.fxGroups.Add(WheelImpactSound);
+                WheelImpactSound.name = "WheelImpactSound";
                 WheelImpactSound.audio = gameObject.AddComponent<AudioSource>();
                 WheelImpactSound.audio.clip = GameDatabase.Instance.GetAudioClip(wheelImpactSound);
                 WheelImpactSound.audio.dopplerLevel = 0f;
@@ -197,10 +200,10 @@ namespace CollisionFX
             }
         }
 
-        bool paused = false;
+        private bool _paused = false;
         private void OnPause()
         {
-            paused = true;
+            _paused = true;
             if (scrapeSparks)
                 ScrapeSounds.audio.Stop();
             if (SparkSounds != null && SparkSounds.audio != null)
@@ -210,7 +213,7 @@ namespace CollisionFX
 
         private void OnUnpause()
         {
-            paused = false;
+            _paused = false;
         }
 
         private void OnDestroy()
@@ -226,7 +229,7 @@ namespace CollisionFX
         // Not called on parts where physicalSignificance = false. Check the parent part instead.
         public void OnCollisionEnter(Collision c)
         {
-            if (paused) return;
+            if (_paused) return;
             if (c.relativeVelocity.magnitude > 3)
             {
                 if (c.contacts.Length == 0)
@@ -234,13 +237,13 @@ namespace CollisionFX
 
                 var cInfo = GetClosestChild(part, c.contacts[0].point + (part.rigidbody.velocity * Time.deltaTime));
                 if (cInfo.CollisionFX != null)
-                {
+
                     cInfo.CollisionFX.Impact(cInfo.IsWheel);
-                }
+
                 else
-                {
+
                     Impact(IsCollidingWheel(c.contacts[0].point));
-                }
+
             }
         }
 
@@ -254,9 +257,9 @@ namespace CollisionFX
                 WheelImpactSound.audio.pitch = UnityEngine.Random.Range(1 - pitchRange, 1 + pitchRange);
                 WheelImpactSound.audio.Play();
                 if (BangSound != null)
-                {
+
                     BangSound.audio.Stop();
-                }
+
             }
             else
             {
@@ -279,7 +282,7 @@ namespace CollisionFX
         // Not called on parts where physicalSignificance = false. Check the parent part instead.
         public void OnCollisionStay(Collision c)
         {
-            if (!scrapeSparks || paused) return;
+            if (!scrapeSparks || _paused) return;
 
             // Contact points are from the previous frame. Add the velocity to get the correct position.
             var cInfo = GetClosestChild(part, c.contacts[0].point + (part.rigidbody.velocity * Time.deltaTime));
@@ -366,7 +369,7 @@ namespace CollisionFX
         /// <param name="c"></param>
         public void Scrape(Collision c)
         {
-            if (paused || part == null)
+            if (_paused || part == null)
             {
                 StopScrape();
                 return;
@@ -420,7 +423,7 @@ namespace CollisionFX
         {
             if (scrapeSparks)
             {
-                if (SparkSounds != null && SparkSounds.audio == null)
+                if (SparkSounds != null && SparkSounds.audio != null)
                     SparkSounds.audio.Stop();
                 scrapeLight.enabled = false;
 #if DEBUG
@@ -509,6 +512,18 @@ namespace CollisionFX
 
         public bool IsRagdoll(GameObject g)
         {
+            /*
+            be_neck01
+            be_spE01
+            bn_l_arm01 1
+            bn_l_elbow_a01
+            bn_l_hip01
+            bn_l_knee_b01
+            bn_r_elbow_a01
+            bn_r_hip01
+            bn_r_knee_b01
+            bn_spA01
+            */
             // TODO: Find a better way of doing this.
             return g.name.StartsWith("bn_") || g.name.StartsWith("be_");
         }
@@ -543,7 +558,10 @@ namespace CollisionFX
                         sparkFx.particleEmitter.worldVelocity = -part.rigidbody.velocity;
                         scrapeLight.enabled = true;
                         scrapeLight.color = Color.Lerp(lightColor1, lightColor2, UnityEngine.Random.Range(0f, 1f));
-                        scrapeLight.intensity = UnityEngine.Random.Range(0f, sparkLightIntensity);
+                        float intensityMultiplier = 1;
+                        if (speed < minScrapeSpeed * 10)
+                            intensityMultiplier = speed / minScrapeSpeed * 10;
+                        scrapeLight.intensity = UnityEngine.Random.Range(0f, sparkLightIntensity * intensityMultiplier);
                     }
                 }
                 
@@ -551,7 +569,7 @@ namespace CollisionFX
                 dustFx.particleEmitter.maxEnergy = speed / 10;                          // Values determined
                 dustFx.particleEmitter.maxEmission = Mathf.Clamp((speed * 2), 0, 75);   // via experimentation.
                 dustFx.particleEmitter.Emit();
-                //dustFx.particleEmitter.worldVelocity = -part.rigidbody.velocity;
+
                 // Set dust biome colour.
                 if (dustAnimator != null)
                 {

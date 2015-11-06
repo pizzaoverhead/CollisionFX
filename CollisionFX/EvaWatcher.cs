@@ -6,7 +6,7 @@ namespace CollisionFX
     [KSPAddon(KSPAddon.Startup.Flight, false)]
     class EvaWatcher : MonoBehaviour
     {
-        private string _configPath = "GameData/CollisionFX/settings.cfg";
+        //private string _configPath = "GameData/CollisionFX/settings.cfg";
 
         bool _scrapeSparks;
         string _collisionSound;
@@ -16,10 +16,10 @@ namespace CollisionFX
         public void Start()
         {
             GameEvents.onCrewOnEva.Add(OnCrewEVA);
-            ConfigNode config = ConfigNode.Load(_configPath);
+            ConfigNode config = ConfigNode.Load(CollisionFX.ConfigPath);
             if (config == null)
             {
-                Debug.LogError("CollisionFX: Configuration file not found at " + _configPath);
+                Debug.LogError("CollisionFX: Configuration file not found at " + CollisionFX.ConfigPath);
                 return;
             }
             foreach (ConfigNode node in config.nodes)
@@ -32,7 +32,7 @@ namespace CollisionFX
                         _collisionSound = node.GetValue("collisionSound");
                     if (node.HasValue("scrapeSound"))
                         _scrapeSound = node.GetValue("scrapeSound");
-                    if (node.HasValue("collisionSound"))
+                    if (node.HasValue("sparkSound"))
                         _sparkSound = node.GetValue("sparkSound");
                 }
             }

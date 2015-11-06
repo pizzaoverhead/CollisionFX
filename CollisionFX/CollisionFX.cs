@@ -1,10 +1,26 @@
 ﻿using System;
 using UnityEngine;
 
+/**********************************************************
+ * TODO:
+ * Update cfg to support Kerbal Foundaries renamed wheels.
+ * Fix sparks when kerbals walk on a craft.
+ * Add particle colours for every body.
+ * Tone down lighting.
+ * Add more public cfg options.
+ * 
+ * Possible features:
+ * Wheel skid sounds and smoke: WheelHit.(forward/side)Slip
+ * Investigate using particle stretching to fake vacuum \
+ * body dust jets for engines.
+ **********************************************************/
+
 namespace CollisionFX
 {
     public class CollisionFX : PartModule
     {
+        public static string ConfigPath = "GameData/CollisionFX/settings.cfg";
+
         [KSPField]
         public float volume = 0.5f;
         [KSPField]
@@ -28,6 +44,8 @@ namespace CollisionFX
         private GameObject sparkFx;
         private GameObject dustFx;
         ParticleAnimator dustAnimator;
+        //private GameObject fragmentFx;
+        //ParticleAnimator fragmentAnimator;
         private ModuleWheel moduleWheel = null;
         private WheelCollider wheelCollider = null;
         private FXGroup ScrapeSounds = new FXGroup("ScrapeSounds");
@@ -54,15 +72,15 @@ namespace CollisionFX
             }
         }
 
+        #region Events
+
         public override void OnStart(StartState state)
         {
             if (state == StartState.Editor || state == StartState.None) return;
 
+            SetupParticles();
             if (scrapeSparks)
-            {
-                SetupParticles();
                 SetupLight();
-            }
 
             if (part.Modules.Contains("ModuleWheel")) // Suppress the log message on failure.
                 moduleWheel = part.Modules["ModuleWheel"] as ModuleWheel;
@@ -81,7 +99,6 @@ namespace CollisionFX
             GameEvents.onGamePause.Add(OnPause);
             GameEvents.onGameUnpause.Add(OnUnpause);
 
-
 #if DEBUG
             for (int i = 0; i < spheres.Length; i++)
             {
@@ -93,122 +110,12 @@ namespace CollisionFX
 #endif
         }
 
-        private void SetupParticles()
-        {
-
-            sparkFx = (GameObject)GameObject.Instantiate(UnityEngine.Resources.Load("Effects/fx_exhaustSparks_flameout"));
-            sparkFx.transform.parent = part.transform;
-            sparkFx.transform.position = part.transform.position;
-            sparkFx.particleEmitter.localVelocity = Vector3.zero;
-            sparkFx.particleEmitter.useWorldSpace = true;
-            sparkFx.particleEmitter.emit = false;
-            sparkFx.particleEmitter.minEnergy = 0;
-            sparkFx.particleEmitter.minEmission = 0;
-
-            dustFx = (GameObject)GameObject.Instantiate(UnityEngine.Resources.Load("Effects/fx_smokeTrail_light"));
-            dustFx.transform.parent = part.transform;
-            dustFx.transform.position = part.transform.position;
-            dustFx.particleEmitter.localVelocity = Vector3.zero;
-            dustFx.particleEmitter.useWorldSpace = true;
-            dustFx.particleEmitter.emit = false;
-            dustFx.particleEmitter.minEnergy = 0;
-            dustFx.particleEmitter.minEmission = 0;
-            dustAnimator = dustFx.particleEmitter.GetComponent<ParticleAnimator>();
-        }
-
-        private void SetupLight()
-        {
-            scrapeLight = sparkFx.AddComponent<Light>();
-            scrapeLight.type = LightType.Point;
-            scrapeLight.range = 3f;
-            scrapeLight.shadows = LightShadows.None;
-            scrapeLight.enabled = false;
-        }
-
-        private void SetupAudio()
-        {
-            if (scrapeSparks)
-            {
-                if (SparkSounds == null)
-                {
-                    Debug.LogError("CollisionFX: SparkSounds was null");
-                    return;
-                }
-                part.fxGroups.Add(SparkSounds);
-                SparkSounds.name = "SparkSounds";
-                SparkSounds.audio = gameObject.AddComponent<AudioSource>();
-                SparkSounds.audio.clip = GameDatabase.Instance.GetAudioClip(sparkSound);
-                if (SparkSounds.audio.clip == null)
-                {
-                    Debug.LogError("CollisionFX: Unable to load sparkSound \"" + sparkSound + "\"");
-                    scrapeSparks = false;
-                    return;
-                }
-                SparkSounds.audio.dopplerLevel = 0f;
-                SparkSounds.audio.rolloffMode = AudioRolloffMode.Logarithmic;
-                SparkSounds.audio.Stop();
-                SparkSounds.audio.loop = true;
-                SparkSounds.audio.volume = volume * GameSettings.SHIP_VOLUME;
-                SparkSounds.audio.time = UnityEngine.Random.Range(0, SparkSounds.audio.clip.length);
-            }
-
-            if (ScrapeSounds == null)
-            {
-                Debug.LogError("CollisionFX: ScrapeSounds was null");
-                return;
-            }
-            part.fxGroups.Add(ScrapeSounds);
-            ScrapeSounds.name = "ScrapeSounds";
-            ScrapeSounds.audio = gameObject.AddComponent<AudioSource>();
-            ScrapeSounds.audio.clip = GameDatabase.Instance.GetAudioClip(scrapeSound);
-            if (ScrapeSounds.audio.clip == null)
-            {
-                Debug.LogError("CollisionFX: Unable to load scrapeSound \"" + scrapeSound + "\"");
-            }
-            else
-            {
-                ScrapeSounds.audio.dopplerLevel = 0f;
-                ScrapeSounds.audio.rolloffMode = AudioRolloffMode.Logarithmic;
-                ScrapeSounds.audio.Stop();
-                ScrapeSounds.audio.loop = true;
-                ScrapeSounds.audio.volume = volume * GameSettings.SHIP_VOLUME;
-                ScrapeSounds.audio.time = UnityEngine.Random.Range(0, ScrapeSounds.audio.clip.length);
-            }
-
-            part.fxGroups.Add(BangSound);
-            BangSound.name = "BangSound";
-            BangSound.audio = gameObject.AddComponent<AudioSource>();
-            BangSound.audio.clip = GameDatabase.Instance.GetAudioClip(collisionSound);
-            BangSound.audio.dopplerLevel = 0f;
-            BangSound.audio.rolloffMode = AudioRolloffMode.Logarithmic;
-            BangSound.audio.Stop();
-            BangSound.audio.loop = false;
-            BangSound.audio.volume = GameSettings.SHIP_VOLUME;
-
-            if (wheelCollider != null && !String.IsNullOrEmpty(wheelImpactSound))
-            {
-                WheelImpactSound = new FXGroup("WheelImpactSound");
-                part.fxGroups.Add(WheelImpactSound);
-                WheelImpactSound.name = "WheelImpactSound";
-                WheelImpactSound.audio = gameObject.AddComponent<AudioSource>();
-                WheelImpactSound.audio.clip = GameDatabase.Instance.GetAudioClip(wheelImpactSound);
-                WheelImpactSound.audio.dopplerLevel = 0f;
-                WheelImpactSound.audio.rolloffMode = AudioRolloffMode.Logarithmic;
-                WheelImpactSound.audio.Stop();
-                WheelImpactSound.audio.loop = false;
-                WheelImpactSound.audio.volume = GameSettings.SHIP_VOLUME;
-            }
-        }
-
         private bool _paused = false;
         private void OnPause()
         {
             _paused = true;
-            if (scrapeSparks)
-                ScrapeSounds.audio.Stop();
             if (SparkSounds != null && SparkSounds.audio != null)
                 SparkSounds.audio.Stop();
-
         }
 
         private void OnUnpause()
@@ -237,44 +144,12 @@ namespace CollisionFX
 
                 var cInfo = GetClosestChild(part, c.contacts[0].point + (part.rigidbody.velocity * Time.deltaTime));
                 if (cInfo.CollisionFX != null)
-
+                {
                     cInfo.CollisionFX.Impact(cInfo.IsWheel);
-
-                else
-
-                    Impact(IsCollidingWheel(c.contacts[0].point));
-
-            }
-        }
-
-        /// <summary>
-        /// This part has come into contact with something. Play an appropriate sound.
-        /// </summary>
-        public void Impact(bool isWheel)
-        {
-            if (isWheel && WheelImpactSound != null)
-            {
-                WheelImpactSound.audio.pitch = UnityEngine.Random.Range(1 - pitchRange, 1 + pitchRange);
-                WheelImpactSound.audio.Play();
-                if (BangSound != null)
-
-                    BangSound.audio.Stop();
-
-            }
-            else
-            {
-                if (BangSound != null)
-                {
-                    if (BangSound.audio != null)
-                    {
-                        // Shift the pitch randomly each time so that the impacts don't all sound the same.
-                        BangSound.audio.pitch = UnityEngine.Random.Range(1 - pitchRange, 1 + pitchRange);
-                        BangSound.audio.Play();
-                    }
                 }
-                if (WheelImpactSound != null)
+                else
                 {
-                    WheelImpactSound.audio.Stop();
+                    Impact(IsCollidingWheel(c.contacts[0].point));
                 }
             }
         }
@@ -282,24 +157,257 @@ namespace CollisionFX
         // Not called on parts where physicalSignificance = false. Check the parent part instead.
         public void OnCollisionStay(Collision c)
         {
+            //DebugParticles(c.collider, c.contacts[0].point);
+
             if (!scrapeSparks || _paused) return;
 
             // Contact points are from the previous frame. Add the velocity to get the correct position.
             var cInfo = GetClosestChild(part, c.contacts[0].point + (part.rigidbody.velocity * Time.deltaTime));
             if (cInfo.CollisionFX != null)
             {
-                StopScrape();
+                StopScrapeLightSound();
                 foreach (var p in part.children)
                 {
                     var colFx = p.GetComponent<CollisionFX>();
                     if (colFx != null)
-                        colFx.StopScrape();
+                        colFx.StopScrapeLightSound();
                 }
                 cInfo.CollisionFX.Scrape(c);
                 return;
             }
 
             Scrape(c);
+        }
+
+        private void OnCollisionExit(Collision c)
+        {
+            StopScrapeLightSound();
+            if (c.contacts.Length > 0)
+            {
+                var cInfo = GetClosestChild(part, c.contacts[0].point + (part.rigidbody.velocity * Time.deltaTime));
+                if (cInfo.CollisionFX != null)
+                    cInfo.CollisionFX.StopScrapeLightSound();
+            }
+        }
+
+        #endregion Events
+
+        /// <summary>
+        /// This part has come into contact with something. Play an appropriate sound.
+        /// </summary>
+        public void Impact(bool isWheel)
+        {
+            if (isWheel && WheelImpactSound != null && WheelImpactSound.audio != null)
+            {
+                WheelImpactSound.audio.pitch = UnityEngine.Random.Range(1 - pitchRange, 1 + pitchRange);
+                WheelImpactSound.audio.Play();
+                if (BangSound != null && BangSound.audio != null)
+                {
+                    BangSound.audio.Stop();
+                }
+            }
+            else
+            {
+                if (BangSound != null && BangSound.audio != null)
+                {
+                    // Shift the pitch randomly each time so that the impacts don't all sound the same.
+                    BangSound.audio.pitch = UnityEngine.Random.Range(1 - pitchRange, 1 + pitchRange);
+                    BangSound.audio.Play();
+                }
+                if (WheelImpactSound != null && WheelImpactSound.audio != null)
+                {
+                    WheelImpactSound.audio.Stop();
+                }
+            }
+        }
+
+        /*private string[] particleTypes = {
+                                            "fx_exhaustFlame_white_tiny",
+                                            "fx_exhaustFlame_yellow",
+                                            "fx_exhaustFlame_blue",
+                                            //"fx_exhaustLight_yellow",
+                                            "fx_exhaustLight_blue",
+                                            "fx_exhaustFlame_blue_small",
+                                            "fx_smokeTrail_light",
+                                            "fx_smokeTrail_medium",
+                                            "fx_smokeTrail_large",
+                                            "fx_smokeTrail_veryLarge",
+                                            "fx_smokeTrail_aeroSpike",
+                                            "fx_gasBurst_white",
+                                            "fx_gasJet_white",
+                                            "fx_SRB_large_emit",
+                                            "fx_SRB_large_emit2",
+                                            "fx_exhaustSparks_flameout",
+                                            "fx_exhaustSparks_flameout_2",
+                                            "fx_exhaustSparks_yellow",
+                                            "fx_shockExhaust_red_small", nope
+                                            "fx_shockExhaust_blue_small",
+                                            "fx_shockExhaust_blue",
+                                            "fx_LES_emit",
+                                            "fx_ksX_emit",
+                                            "fx_ks25_emit",
+                                            "fx_ks1_emit"
+                                         };*/
+
+        //int currentParticle = 0;
+        private void SetupParticles()
+        {
+            /*UnityEngine.Object o = null;
+            while (o == null)
+            {
+                string name = "Effects/" + particleTypes[currentParticle];
+                Debug.Log("Attempting to load " + name);
+                o = UnityEngine.Resources.Load(name);
+                currentParticle++;
+                if (currentParticle >= particleTypes.Length) currentParticle = 0;
+            }*/
+
+            //ScreenMessages.PostScreenMessage(particleTypes[currentParticle]);
+            if (scrapeSparks)
+            {
+                sparkFx = (GameObject)GameObject.Instantiate(UnityEngine.Resources.Load("Effects/fx_exhaustSparks_flameout"));
+                sparkFx.transform.parent = part.transform;
+                sparkFx.transform.position = part.transform.position;
+                sparkFx.particleEmitter.localVelocity = Vector3.zero;
+                sparkFx.particleEmitter.useWorldSpace = true;
+                sparkFx.particleEmitter.emit = false;
+                sparkFx.particleEmitter.minEnergy = 0;
+                sparkFx.particleEmitter.minEmission = 0;
+            }
+
+            dustFx = (GameObject)GameObject.Instantiate(UnityEngine.Resources.Load("Effects/fx_smokeTrail_light"));
+            dustFx.transform.parent = part.transform;
+            dustFx.transform.position = part.transform.position;
+            dustFx.particleEmitter.localVelocity = Vector3.zero;
+            dustFx.particleEmitter.useWorldSpace = true;
+            dustFx.particleEmitter.emit = false;
+            dustFx.particleEmitter.minEnergy = 0;
+            dustFx.particleEmitter.minEmission = 0;
+            dustAnimator = dustFx.particleEmitter.GetComponent<ParticleAnimator>();
+
+            /*fragmentFx = (GameObject)GameObject.Instantiate(UnityEngine.Resources.Load("Effects/fx_exhaustSparks_yellow"));
+            fragmentFx.transform.parent = part.transform;
+            fragmentFx.transform.position = part.transform.position;
+            fragmentFx.particleEmitter.localVelocity = Vector3.zero;
+            fragmentFx.particleEmitter.useWorldSpace = true;
+            fragmentFx.particleEmitter.emit = false;
+            fragmentFx.particleEmitter.minEnergy = 0;
+            fragmentFx.particleEmitter.minEmission = 0;
+            fragmentAnimator = fragmentFx.particleEmitter.GetComponent<ParticleAnimator>();*/
+        }
+
+        private void SetupLight()
+        {
+            scrapeLight = sparkFx.AddComponent<Light>();
+            scrapeLight.type = LightType.Point;
+            scrapeLight.range = 3f;
+            scrapeLight.shadows = LightShadows.None;
+            scrapeLight.enabled = false;
+        }
+
+        private void SetupAudio()
+        {
+            if (scrapeSparks)
+            {
+                if (SparkSounds == null)
+                {
+                    Debug.LogError("CollisionFX: SparkSounds was null");
+                    return;
+                }
+                if (!String.IsNullOrEmpty(sparkSound))
+                {
+                    part.fxGroups.Add(SparkSounds);
+                    SparkSounds.name = "SparkSounds";
+                    SparkSounds.audio = gameObject.AddComponent<AudioSource>();
+                    SparkSounds.audio.clip = GameDatabase.Instance.GetAudioClip(sparkSound);
+                    if (SparkSounds.audio.clip == null)
+                    {
+                        Debug.LogError("CollisionFX: Unable to load sparkSound \"" + sparkSound + "\"");
+                        scrapeSparks = false;
+                        return;
+                    }
+                    SparkSounds.audio.dopplerLevel = 0f;
+                    SparkSounds.audio.rolloffMode = AudioRolloffMode.Logarithmic;
+                    SparkSounds.audio.Stop();
+                    SparkSounds.audio.loop = true;
+                    SparkSounds.audio.volume = volume * GameSettings.SHIP_VOLUME;
+                    SparkSounds.audio.time = UnityEngine.Random.Range(0, SparkSounds.audio.clip.length);
+                }
+            }
+
+            if (ScrapeSounds == null)
+            {
+                Debug.LogError("CollisionFX: ScrapeSounds was null");
+                return;
+            }
+            if (!String.IsNullOrEmpty(scrapeSound))
+            {
+                part.fxGroups.Add(ScrapeSounds);
+                ScrapeSounds.name = "ScrapeSounds";
+                ScrapeSounds.audio = gameObject.AddComponent<AudioSource>();
+                ScrapeSounds.audio.clip = GameDatabase.Instance.GetAudioClip(scrapeSound);
+                if (ScrapeSounds.audio.clip == null)
+                {
+                    Debug.LogError("CollisionFX: Unable to load scrapeSound \"" + scrapeSound + "\"");
+                }
+                else
+                {
+                    ScrapeSounds.audio.dopplerLevel = 0f;
+                    ScrapeSounds.audio.rolloffMode = AudioRolloffMode.Logarithmic;
+                    ScrapeSounds.audio.Stop();
+                    ScrapeSounds.audio.loop = true;
+                    ScrapeSounds.audio.volume = volume * GameSettings.SHIP_VOLUME;
+                    ScrapeSounds.audio.time = UnityEngine.Random.Range(0, ScrapeSounds.audio.clip.length);
+                }
+            }
+
+            if (!String.IsNullOrEmpty(collisionSound))
+            {
+                part.fxGroups.Add(BangSound);
+                BangSound.name = "BangSound";
+                BangSound.audio = gameObject.AddComponent<AudioSource>();
+                BangSound.audio.clip = GameDatabase.Instance.GetAudioClip(collisionSound);
+                BangSound.audio.dopplerLevel = 0f;
+                BangSound.audio.rolloffMode = AudioRolloffMode.Logarithmic;
+                BangSound.audio.Stop();
+                BangSound.audio.loop = false;
+                BangSound.audio.volume = GameSettings.SHIP_VOLUME;
+            }
+
+            if (wheelCollider != null && !String.IsNullOrEmpty(wheelImpactSound))
+            {
+                WheelImpactSound = new FXGroup("WheelImpactSound");
+                part.fxGroups.Add(WheelImpactSound);
+                WheelImpactSound.name = "WheelImpactSound";
+                WheelImpactSound.audio = gameObject.AddComponent<AudioSource>();
+                WheelImpactSound.audio.clip = GameDatabase.Instance.GetAudioClip(wheelImpactSound);
+                WheelImpactSound.audio.dopplerLevel = 0f;
+                WheelImpactSound.audio.rolloffMode = AudioRolloffMode.Logarithmic;
+                WheelImpactSound.audio.Stop();
+                WheelImpactSound.audio.loop = false;
+                WheelImpactSound.audio.volume = GameSettings.SHIP_VOLUME;
+            }
+        }
+
+        public void DebugParticles(Collider col, Vector3 contactPoint)
+        {
+            Color c = ColourManager.GetBiomeColour(col);
+            dustFx.transform.position = contactPoint;
+            dustFx.particleEmitter.maxEnergy = 10;
+            dustFx.particleEmitter.maxEmission = 75;
+            dustFx.particleEmitter.Emit();
+            //dustFx.particleEmitter.worldVelocity = -part.rigidbody.velocity;
+            // Set dust biome colour.
+            if (dustAnimator != null)
+            {
+                Color[] colors = dustAnimator.colorAnimation;
+                colors[0] = c;
+                colors[1] = c;
+                colors[2] = c;
+                colors[3] = c;
+                colors[4] = c;
+                dustAnimator.colorAnimation = colors;
+            }
         }
 
         /// <summary>
@@ -371,11 +479,13 @@ namespace CollisionFX
         {
             if (_paused || part == null)
             {
-                StopScrape();
+                StopScrapeLightSound();
                 return;
             }
+            float m = c.relativeVelocity.magnitude;
             if (wheelCollider != null)
             {
+
                 // Has a wheel collider.
                 if (moduleWheel != null)
                 {
@@ -383,14 +493,16 @@ namespace CollisionFX
                     if (!moduleWheel.isDamaged)
                     {
                         // Has an intact wheel.
-                        StopScrape();
+                        StopScrapeLightSound();
+                        ScrapeParticles(m, c.contacts[0].point + (part.rigidbody.velocity * Time.deltaTime), c.collider, c.gameObject);
                         return;
                     }
                 }
                 else
                 {
                     // Has a wheel collider but not a wheel (hover parts, some landing gear).
-                    StopScrape();
+                    StopScrapeLightSound();
+                    ScrapeParticles(m, c.contacts[0].point + (part.vel * Time.deltaTime), c.collider, c.gameObject);
                     return;
                 }
             }
@@ -399,17 +511,19 @@ namespace CollisionFX
                 sparkFx.transform.LookAt(c.transform);
             if (part.rigidbody == null) // Part destroyed?
             {
-                StopScrape();
+                StopScrapeLightSound();
                 return;
             }
 
-            float m = c.relativeVelocity.magnitude;
             ScrapeParticles(m, c.contacts[0].point + (part.rigidbody.velocity * Time.deltaTime), c.collider, c.gameObject);
             ScrapeSound(ScrapeSounds, m);
             if (CanSpark(c.collider, c.gameObject))
                 ScrapeSound(SparkSounds, m);
             else
-                SparkSounds.audio.Stop();
+            {
+                if (SparkSounds != null && SparkSounds.audio != null)
+                    SparkSounds.audio.Stop();
+            }
 
 #if DEBUG
             spheres[0].renderer.enabled = false;
@@ -419,18 +533,19 @@ namespace CollisionFX
 #endif
         }
 
-        public void StopScrape()
+        public void StopScrapeLightSound()
         {
             if (scrapeSparks)
             {
                 if (SparkSounds != null && SparkSounds.audio != null)
                     SparkSounds.audio.Stop();
-                scrapeLight.enabled = false;
 #if DEBUG
+                Debug.Log("#Stopping scrape sparks");
                 spheres[0].transform.position = part.transform.position;
                 spheres[0].renderer.enabled = true;
                 spheres[1].renderer.enabled = false;
 #endif
+                scrapeLight.enabled = false;
             }
 
             if (ScrapeSounds != null && ScrapeSounds.audio != null)
@@ -449,65 +564,18 @@ namespace CollisionFX
             Ice Caps        Snow
          */
 
-        public string GetCurrentBiomeName()
+        public bool HasIntactWheel()
         {
-            CBAttributeMapSO biomeMap = FlightGlobals.currentMainBody.BiomeMap;
-            CBAttributeMapSO.MapAttribute mapAttribute = biomeMap.GetAtt(vessel.latitude * Mathf.Deg2Rad, vessel.longitude * Mathf.Deg2Rad);
-            return mapAttribute.name;
-        }
+            if (wheelCollider == null)
+                return false;
+            // Has a wheel collider.
 
-        public Color genericDustColour = new Color(0.8f, 0.8f, 0.8f, 0.007f); // Grey 210 210 210
-        public Color dirtColour = new Color(0.65f, 0.48f, 0.34f, 0.05f); // Brown 165, 122, 88
-        public Color lightDirtColour = new Color(0.65f, 0.52f, 0.34f, 0.05f); // Brown 165, 132, 88
-        public Color sandColour = new Color(0.80f, 0.68f, 0.47f, 0.05f); // Light brown 203, 173, 119
-        public Color snowColour = new Color(0.90f, 0.94f, 1f, 0.05f); // Blue-white 230, 250, 255
-        public Color GetBiomeColour(Collider c)
-        {
-            switch (FlightGlobals.ActiveVessel.mainBody.name)
-            {
-                case "Kerbin":
-                    if (IsPQS(c))
-                    {
-                        string biome = GetCurrentBiomeName();
-                        switch (biome)
-                        {
-                            case "Water":
-                                return sandColour;
-                            case "Grasslands":
-                                return dirtColour;
-                            case "Highlands":
-                                return dirtColour;
-                            case "Shores":
-                                return lightDirtColour;
-                            case "Mountains":
-                                return dirtColour;
-                            case "Deserts":
-                                return sandColour;
-                            case "Badlands":
-                                return dirtColour;
-                            case "Tundra":
-                                return dirtColour;
-                            case "Ice Caps":
-                                return snowColour;
-                            default:
-                                return dirtColour;
-                        }
-                    }
-                    else
-                    {
-                        return genericDustColour;
-                    }
-                default:
-                    return genericDustColour;
-            }
-        }
+            if (moduleWheel == null)
+                return false;
+            // Has a wheel module.
 
-        public bool IsPQS(Collider c)
-        {
-            if (c == null) return false;
-            // Test for PQS: Name in the form "Ab0123456789".
-            Int64 n;
-            return c.name.Length == 12 && Int64.TryParse(c.name.Substring(2, 10), out n);
+            // Has an intact wheel.
+            return !moduleWheel.isDamaged;
         }
 
         public bool IsRagdoll(GameObject g)
@@ -540,16 +608,17 @@ namespace CollisionFX
 
         public bool CanSpark(Collider c, GameObject collidedWith)
         {
-            return scrapeSparks && TargetScrapeSparks(collidedWith) && FlightGlobals.ActiveVessel.atmDensity > 0 && FlightGlobals.currentMainBody.atmosphereContainsOxygen && !IsPQS(c);
+            return scrapeSparks && TargetScrapeSparks(collidedWith) && FlightGlobals.ActiveVessel.atmDensity > 0 &&
+                FlightGlobals.currentMainBody.atmosphereContainsOxygen && !ColourManager.IsPQS(c);
         }
 
         private void ScrapeParticles(float speed, Vector3 contactPoint, Collider col, GameObject collidedWith)
         {
             if (speed > minScrapeSpeed)
             {
-                if (!IsPQS(col) && !wheelCollider && TargetScrapeSparks(collidedWith) && !IsRagdoll(collidedWith))
+                if (!ColourManager.IsPQS(col) && TargetScrapeSparks(collidedWith) && !IsRagdoll(collidedWith))
                 {
-                    if (FlightGlobals.ActiveVessel.atmDensity > 0 && FlightGlobals.currentMainBody.atmosphereContainsOxygen)
+                    if (CanSpark(col, collidedWith) && FlightGlobals.ActiveVessel.atmDensity > 0 && FlightGlobals.currentMainBody.atmosphereContainsOxygen)
                     {
                         sparkFx.transform.position = contactPoint;
                         sparkFx.particleEmitter.maxEnergy = speed / 10;                          // Values determined
@@ -560,36 +629,64 @@ namespace CollisionFX
                         scrapeLight.color = Color.Lerp(lightColor1, lightColor2, UnityEngine.Random.Range(0f, 1f));
                         float intensityMultiplier = 1;
                         if (speed < minScrapeSpeed * 10)
-                            intensityMultiplier = speed / minScrapeSpeed * 10;
+                            intensityMultiplier = speed / (minScrapeSpeed * 10);
                         scrapeLight.intensity = UnityEngine.Random.Range(0f, sparkLightIntensity * intensityMultiplier);
                     }
-                }
-                
-                dustFx.transform.position = contactPoint;
-                dustFx.particleEmitter.maxEnergy = speed / 10;                          // Values determined
-                dustFx.particleEmitter.maxEmission = Mathf.Clamp((speed * 2), 0, 75);   // via experimentation.
-                dustFx.particleEmitter.Emit();
+                    else
+                    {
+                        /*fragmentFx.transform.position = contactPoint;
+                        fragmentFx.particleEmitter.maxEnergy = speed / 10;                          // Values determined
+                        fragmentFx.particleEmitter.maxEmission = Mathf.Clamp((speed * 2), 0, 75);   // via experimentation.
+                        fragmentFx.particleEmitter.Emit();
+                        fragmentFx.particleEmitter.worldVelocity = -part.rigidbody.velocity;
+                        if (fragmentAnimator != null)
+                        {
+                            Color[] colors = dustAnimator.colorAnimation;
+                            Color light = new Color(0.95f, 0.95f, 0.95f);
+                            Color dark = new Color(0.05f, 0.05f, 0.05f);
 
-                // Set dust biome colour.
-                if (dustAnimator != null)
+                            colors[0] = Color.gray;
+                            colors[1] = light;
+                            colors[2] = dark;
+                            colors[3] = light;
+                            colors[4] = dark;
+                            fragmentAnimator.colorAnimation = colors;
+                        }*/
+                    }
+                }
+
+                if (!wheelCollider)
                 {
-                    Color c = GetBiomeColour(col);
-                    Color[] colors = dustAnimator.colorAnimation;
-                    colors[0] = c;
-                    colors[1] = c;
-                    colors[2] = c;
-                    colors[3] = c;
-                    colors[4] = c;
-                    dustAnimator.colorAnimation = colors;
+                    Color c = ColourManager.GetBiomeColour(col);
+                    dustFx.transform.position = contactPoint;
+                    dustFx.particleEmitter.maxEnergy = speed / 10;                          // Values determined
+                    dustFx.particleEmitter.maxEmission = Mathf.Clamp((speed * 2), 0, 75);   // via experimentation.
+                    dustFx.particleEmitter.Emit();
+                    //dustFx.particleEmitter.worldVelocity = -part.rigidbody.velocity;
+                    // Set dust biome colour.
+                    if (dustAnimator != null)
+                    {
+                        Color[] colors = dustAnimator.colorAnimation;
+                        colors[0] = c;
+                        colors[1] = c;
+                        colors[2] = c;
+                        colors[3] = c;
+                        colors[4] = c;
+                        dustAnimator.colorAnimation = colors;
+                    }
                 }
-
             }
             else
-                scrapeLight.enabled = false;
+            {
+                if (scrapeLight != null)
+                    scrapeLight.enabled = false;
+            }
         }
 
         private void ScrapeSound(FXGroup sound, float speed)
         {
+            if (sound == null || sound.audio == null)
+                return;
             if (speed > minScrapeSpeed)
             {
                 if (!sound.audio.isPlaying)
@@ -607,17 +704,56 @@ namespace CollisionFX
             else
                 sound.audio.Stop();
         }
+    }
 
-        private void OnCollisionExit(Collision c)
+#if DEBUG
+    [KSPAddon(KSPAddon.Startup.MainMenu, false)]
+    class AutoStartup : UnityEngine.MonoBehaviour
+    {
+        public static bool first = true;
+        public void Start()
         {
-            StopScrape();
-            if (c.contacts.Length > 0)
+            //only do it on the first entry to the menu
+            if (first)
             {
-                var cInfo = GetClosestChild(part, c.contacts[0].point + (part.rigidbody.velocity * Time.deltaTime));
-                if (cInfo.CollisionFX != null)
-                    cInfo.CollisionFX.StopScrape();
+                first = false;
+                HighLogic.SaveFolder = "test";
+                var game = GamePersistence.LoadGame("persistent", HighLogic.SaveFolder, true, false);
+                if (game != null && game.flightState != null && game.compatible)
+                    FlightDriver.StartAndFocusVessel(game, game.flightState.activeVesselIdx);
+                CheatOptions.InfiniteFuel = true;
+                CheatOptions.InfiniteRCS = true;
             }
         }
     }
+#endif
 }
 
+
+//ScreenMessages.PostScreenMessage("Collider: " + c.collider + "\ngameObject: " + c.gameObject + "\nrigidbody: " + c.rigidbody + "\ntransform: " + c.transform);
+/*
+    Collider		    gameObject		    rigidbody		transform
+    runway_collider		runway_collider		""			runway_collider
+    End09_Mesh		    End09_Mesh		    ""			End09_Mesh
+    Section4_Mesh
+    Section3_Mesh
+    Section2_Mesh
+    Section1_Mesh
+    End27_Mesh
+    Zn1232223233		Zn1232223233		""			Zn1232223233		
+    Zn1232223332
+    model_launchpad_ground_collider_v46
+    Launch Pad
+    launchpad_ramps
+    Fuel Pipe
+    Fuel Port
+    launchpad_shoulders
+    model_vab_exterior_crawlerway_collider_v46
+    Zn1232223211
+    Zn1232223210
+    Zn1232223032
+    Zn3001100000 - mountain top
+    Zn2101022132 - Desert
+    Zn2101022133
+    Yp0333302322 - North pole
+ * */

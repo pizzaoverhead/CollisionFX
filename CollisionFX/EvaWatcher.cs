@@ -19,7 +19,7 @@ namespace CollisionFX
             ConfigNode config = ConfigNode.Load(CollisionFX.ConfigPath);
             if (config == null)
             {
-                Debug.LogError("CollisionFX: Configuration file not found at " + CollisionFX.ConfigPath);
+                Debug.LogError("[CollisionFX] Configuration file not found at " + CollisionFX.ConfigPath);
                 return;
             }
             foreach (ConfigNode node in config.nodes)
